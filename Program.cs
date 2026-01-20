@@ -1,13 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using SharpAstrology.Enums;
-using SharpAstrology.Ephemerides;
 using SharpAstrology.HumanDesign;
 using SharpAstrology.Interfaces;
+using SharpAstrology.SwissEph;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
-// Allow your website to call this API (CORS)
+// CORS (allow browser calls)
 app.Use(async (context, next) =>
 {
     context.Response.Headers["Access-Control-Allow-Origin"] = "*";
@@ -32,13 +31,11 @@ app.MapPost("/api/hd-type", ([FromBody] HdRequest req) =>
         return Results.BadRequest(new { error = "Missing BirthDate, BirthTime, or UtcOffset" });
     }
 
-    // Combine date + time
     if (!DateTime.TryParse($"{req.BirthDate}T{req.BirthTime}:00", out var localDateTime))
     {
         return Results.BadRequest(new { error = "Invalid date or time format" });
     }
 
-    // Parse UTC offset like -05:00 or +01:00
     if (!TimeSpan.TryParse(req.UtcOffset, out var offset))
     {
         return Results.BadRequest(new { error = "Invalid UTC offset format" });
@@ -47,17 +44,15 @@ app.MapPost("/api/hd-type", ([FromBody] HdRequest req) =>
     // Convert local birth time → UTC
     var utcBirthTime = new DateTimeOffset(localDateTime, offset).UtcDateTime;
 
-    // Create ephemeris (no external files needed)
-    var ephService = new SwissEphemeridesService(EphType.Moshier);
-    using IEphemerides eph = ephService.CreateContext();
+    // Create ephemeris context (Moshier = no external files)
+    using IEphemerides eph = new SwissEphemerides();
 
-    // Build Human Design chart
-    var chart = new HumanDesignChart(utcBirthTime, eph);
+    // Build Human Design bodygraph
+    var bodyGraph = new HumanDesignBodyGraph(utcBirthTime, eph);
 
-    // Return ONLY the Type
     return Results.Ok(new
     {
-        type = chart.Type.ToString()
+        type = bodyGraph.Type.ToString()
     });
 });
 
